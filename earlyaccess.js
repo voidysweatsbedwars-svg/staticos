@@ -1,72 +1,57 @@
 /* ============================================================
-   shell/earlyaccess.js — what the beta site adds to StaticOS.
+   earlyaccess.js — the early-access channel for StaticOS developers.
 
-   Only active when this site's channel.json says "beta" (see
-   core/earlyaccess.js); on the stable site it does nothing.
+   Two sites run the same code from different branches:
+     stable   https://staticos.surge.sh        (main, fully tested)
+     beta     https://staticos-early.surge.sh   (branch `beta`, every push)
+   The beta's deploy (.github/workflows/beta.yml) writes a small
+   channel.json beside the page: {"channel":"beta","built":…,"commit":…}.
+   The stable site has no such file, so "no channel.json" means stable.
 
-     banner   a slim "Early access build" strip, always visible, with
-              the build time and a link back to the stable site
-     gate     on a first visit, "sign in with the developer account to
-              continue", using the same PBKDF2 verifier as shell/account.js.
-              After that the normal session (store 'session.user') remembers it.
+   Each address keeps its own saved data (Settings → Back up your data
+   moves it), which is why the stable site only links across.
 
-   Honest limits: this is a front door, not a vault. The page and its
-   files are public, and anyone with DevTools can set the session
-   themselves. The gate keeps casual visitors out and tells them what
-   this build is; nothing secret may ever sit behind it.
+   Nothing here is a secret. The beta is a public web address; the
+   developer sign-in in front of it (shell/earlyaccess.js) is a front
+   door, not a vault, exactly like shell/account.js.
    ============================================================ */
-import { h } from '../core/dom.js';
-import { icon } from '../core/icons.js';
-import { store } from '../core/store.js';
-import { thisChannel, STABLE_URL, when } from '../core/earlyaccess.js';
-import { signInDev } from './account.js';
-import { t as tr } from '../core/i18n.js';
+export const STABLE_URL = 'https://staticos.surge.sh/';
+export const BETA_URL = 'https://staticos-early.surge.sh/';
 
-const isDev = () => !!store.get('session.user', null)?.dev;
+const getJson = async (url, ms = 8000) => {
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), ms) : 0;
+  try {
+    const r = await fetch(url, { cache: 'no-store', signal: ctl?.signal });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; } finally { clearTimeout(t); }
+};
 
-export async function mountEarlyAccess(host) {
-  const ch = await thisChannel();
-  if (!ch) return () => {};
-  document.documentElement.dataset.channel = 'beta';
+/* clean a channel.json; null for anything that is not a well-formed one */
+const clean = c => (c && typeof c === 'object' && typeof c.channel === 'string'
+  ? { channel: c.channel, built: typeof c.built === 'string' ? c.built : '', commit: typeof c.commit === 'string' ? c.commit.slice(0, 40) : '' }
+  : null);
 
-  const t = when(ch.built);
-  const banner = h('div.ea-banner', { role: 'note' },
-    icon('zap'),
-    h('b', { text: tr('Early access build') }),
-    t ? h('span', { text: tr('built {t}', { t }) }) : null,
-    h('a', { href: STABLE_URL, rel: 'noopener', text: tr('Back to the stable site') }));
-  document.body.appendChild(banner);
-
-  let gate = null;
-  const lift = on => { try { host.inert = on; } catch (e) { /* older browsers */ } };
-  function openGate() {
-    if (gate) return;
-    const err = h('div.ea-gate__err', { role: 'alert' });
-    const pw = h('input.acct-field__in', { type: 'password', autocomplete: 'off', 'aria-label': tr('Developer password') });
-    const go = h('button.btn.btn--primary', { type: 'submit' }, tr('Continue'));
-    const form = h('form.ea-gate__form', {
-      onsubmit: async e => {
-        e.preventDefault();
-        err.textContent = '';
-        go.disabled = true;
-        try { await signInDev(pw.value); } catch (x) { err.textContent = x.message; go.disabled = false; pw.select(); }
-      },
-    }, h('label.acct-field', h('span', { text: tr('Developer password') }), pw), go);
-    gate = h('div.ea-gate', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ea-gate-t' },
-      h('div.ea-gate__card',
-        h('div.ea-gate__brand', icon('zap'), h('b', { text: tr('StaticOS early access') })),
-        h('h1#ea-gate-t.ea-gate__t', { text: tr('Early-access build') }),
-        h('p', { text: tr('This is the early-access build for StaticOS developers. Sign in with the developer account to continue.') }),
-        form, err,
-        h('p.ea-gate__small', tr('This is a front door, not a vault. The password is checked in your browser against a one-way hash, and this page is public: nothing secret is behind it. '), h('a', { href: STABLE_URL, rel: 'noopener', text: tr('Go to the stable site') }))));
-    document.body.appendChild(gate);
-    lift(true);
-    setTimeout(() => pw.focus(), 30);
-  }
-  function closeGate() { gate?.remove(); gate = null; lift(false); }
-  const sync = () => (isDev() ? closeGate() : openGate());
-  sync();
-  const off = store.sub('session.user', sync);
-  return () => { off?.(); closeGate(); banner.remove(); delete document.documentElement.dataset.channel; };
+/* This site's own channel: {channel:'beta', built, commit}, or null for stable. */
+let own = null;
+export function thisChannel() {
+  own ||= getJson('channel.json').then(c => { const k = clean(c); return k && k.channel === 'beta' ? k : null; });
+  return own;
 }
-export default mountEarlyAccess;
+
+export const when = iso => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+/* The same card for the account menu's sheet and the Developer Room.
+   It only links across: the stable site cannot read the beta's files (Surge
+   sends no CORS header), so it shows no version or notes of its own. */
+export function earlyAccessCard(h, icon) {
+  return h('div.ea-card',
+    h('p.ea-card__p', { text: 'Early access is the build developers get before everyone else, finished or not. It lives at its own web address, so its saved data is separate from this site (Settings → Back up your data moves it).' }),
+    h('p.ea-card__p', { text: 'What\'s new there shows when you open it.' }),
+    h('div.ea-card__acts',
+      h('a.btn.btn--primary.btn--sm', { href: BETA_URL, target: '_blank', rel: 'noopener', 'data-ea': 'open' }, icon('external-link'), 'Open early access')));
+}

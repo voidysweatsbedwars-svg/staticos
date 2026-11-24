@@ -1,163 +1,113 @@
 /* ============================================================
-   recap.js — every Sunday, a card with your week.
+   recap.js — one week of this device, from records only.
 
-   On Sunday (local), or the first time StaticOS is opened after
-   one, a card above the dock shows that Monday-to-Sunday week as
-   this device measured it (js/core/recap.js): total time, the top
-   three apps and games with their real time, focus sessions, the
-   things you made and the badges you earned. A part with nothing
-   measured is left out — never a zero, never a guess — and a week
-   with nothing at all gets no card.
+   The week runs Monday to Sunday by the local calendar; a recap
+   belongs to its Sunday. Every number comes from something this
+   device actually kept, and a part with nothing in it is left out
+   (null) rather than shown as a zero:
 
-   Once per week: portal.recap.shown holds the Sunday last shown.
-   prefs.weeklyRecap (default on) turns the card off; Settings ›
-   Screen Time has the switch and "Show the last one" (bus
-   'recap:show'), which shows the latest week whatever it holds.
+     time      js/core/screentime.js — seconds the front app was in
+               use, per app and per game (by id)
+     focus     js/core/focus.js — completed focus sessions and minutes
+     made      files saved this week in ~/Pictures, ~/Videos and
+               ~/Music (by their saved time; the files StaticOS ships
+               with don't count), and games made in Forge or Studio
+               (js/core/projects.js — created this week; not ones
+               saved from someone else's link or imported from a file)
+     badges    js/core/achievements.js — unlocked this week
+
+   sundayOf(date)   'YYYY-MM-DD' of the Sunday ending date's week
+                    (date itself on a Sunday)
+   week(sunday)     Promise<recap> — see build() below
    ============================================================ */
-import api from '../core/api.js?v=ps5-cloud-proxy-v11';
-import { bus } from '../core/bus.js';
-import { store } from '../core/store.js';
-import { covered } from '../core/cover.js';
-import { hasIcon } from '../core/icons.js';
-import * as RECAP from '../core/recap.js';
-import { fmtDur } from '../core/screentime.js';
-import { appTile } from '../core/appart.js';
-import { t as tr } from '../core/i18n.js';
+import * as ST from './screentime.js';
+import * as FOCUS from './focus.js';
+import * as ACH from './achievements.js';
+import { vfs } from './vfs.js';
 
-const PREF = 'prefs.weeklyRecap';
-const SHOWN = 'portal.recap';
-const RECHECK_MS = 10 * 60e3;      /* an empty week is looked at again this often */
+const pad = n => String(n).padStart(2, '0');
+const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateOf = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
 
-if (typeof document !== 'undefined' && !document.getElementById('feat-recap-css')) {
-  document.head.appendChild(Object.assign(document.createElement('link'), { id: 'feat-recap-css', rel: 'stylesheet', href: 'css/feat-recap.css' }));
+/** The Sunday that closes the week `d` is in (d itself on a Sunday). */
+export function sundayOf(d = new Date()) {
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((7 - d.getDay()) % 7));
+  return keyOf(s);
+}
+/** The most recent Sunday on or before d: the last week that has ended or is ending today. */
+export function lastSunday(d = new Date()) {
+  return keyOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay()));
+}
+/** [start, end) of the week ending on that Sunday, in ms. */
+export function bounds(sunday) {
+  const end = dateOf(sunday);
+  const from = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6).getTime();
+  const to = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
+  return { from, to };
 }
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+export const FOLDERS = ['Pictures', 'Videos', 'Music'];
 
-export function mountRecap(host) {
-  const { h, icon, getApp } = api;
-  let card = null;
-  let busy = false;
-  let lastLook = { sunday: '', at: 0 };
-  let dead = false;
-
-  const ready = () => store.get('session.onboarded', false) && !covered() && !document.querySelector('.lock');
-
-  const glyph = (app, ic) => appTile(app || { g1: 'var(--accent-soft)', g2: 'var(--accent)' }, {
-    gs: '26px', attrs: { 'aria-hidden': 'true' },
-    icon: ic && hasIcon(ic) ? ic : (app && app.icon) || 'apps',
-  });
-
-  const item = (g, name, sec, data) => h('li.recap__row', { dataset: data },
-    g, h('span.recap__name', { text: name }), h('b.recap__v', { text: fmtDur(sec) }));
-
-  function hide() {
-    if (!card) return;
-    const el = card;
-    card = null;
-    if (el.contains(document.activeElement)) bus.emit('a11y:refocus');
-    el.classList.add('is-out');
-    setTimeout(() => el.remove(), 240);
+/** Files saved in ~/Pictures, ~/Videos and ~/Music during [from, to). */
+export function filesSaved(from, to) {
+  const out = {};
+  for (const dir of FOLDERS) {
+    let n = 0;
+    try {
+      vfs.walk(`${vfs.HOME}/${dir}`, node => {
+        if (node.type !== 'file' || node.seed) return;
+        const t = Date.parse(node.mtime);
+        if (Number.isFinite(t) && t >= from && t < to) n++;
+      });
+    } catch (e) { /* no such folder */ }
+    if (n) out[dir] = n;
   }
-
-  function show(r) {
-    hide();
-    const end = new Date(r.to - 1), start = new Date(r.from);
-    const parts = [];
-    if (r.time) {
-      const t = r.time;
-      parts.push(h('section.recap__part', { dataset: { part: 'time' } },
-        h('div.recap__big', h('b', { text: fmtDur(t.total) }), h('small', { text: `in StaticOS, on ${plural(t.days, 'day')}` }))));
-      if (t.apps.length) {
-        parts.push(h('section.recap__part', { dataset: { part: 'apps' } },
-          h('div.recap__k', { text: tr('Top apps') }),
-          h('ol.recap__list', t.apps.map(a => {
-            const app = getApp(a.id);
-            return item(glyph(app), app ? app.name : a.id, a.sec, { app: a.id, sec: String(a.sec) });
-          }))));
-      }
-      if (t.games.length) {
-        parts.push(h('section.recap__part', { dataset: { part: 'games' } },
-          h('div.recap__k', { text: tr('Top games') }),
-          h('ol.recap__list', t.games.map(g => item(glyph(getApp(g.kind === 'arcade' ? 'arcade' : 'aether-games'), g.icon), g.title, g.sec, { game: g.key, sec: String(g.sec) })))));
-      }
-    }
-    if (r.focus) {
-      parts.push(h('section.recap__part.recap__line', { dataset: { part: 'focus' } },
-        icon('clock'), h('span', { text: `${plural(r.focus.n, 'focus session')} · ${r.focus.min} min of focus` })));
-    }
-    if (r.made) {
-      const bits = [];
-      const f = r.made.files;
-      if (f.Pictures) bits.push(`${plural(f.Pictures, 'picture')}`);
-      if (f.Videos) bits.push(`${plural(f.Videos, 'video')}`);
-      if (f.Music) bits.push(`${plural(f.Music, 'song or sound', 'songs or sounds')}`);
-      const filesText = bits.length ? `${bits.join(', ')} saved` : '';
-      const gamesText = r.made.games ? `${plural(r.made.games, 'game')} made in Forge or Studio` : '';
-      parts.push(h('section.recap__part.recap__line', { dataset: { part: 'made' } },
-        icon('sparkles'), h('span', { text: [filesText, gamesText].filter(Boolean).join(' · ') })));
-    }
-    if (r.badges) {
-      parts.push(h('section.recap__part', { dataset: { part: 'badges' } },
-        h('div.recap__k', { text: r.badges.length === 1 ? tr('Badge earned') : tr('Badges earned') }),
-        h('div.recap__badges', r.badges.map(b => h('span.chip.recap__badge', icon(hasIcon(b.icon) ? b.icon : 'star'), h('span', { text: b.name }))))));
-    }
-    if (r.empty) {
-      parts.push(h('p.recap__none', { dataset: { part: 'none' }, text: tr('Nothing was measured on this device that week. Screen Time counts while StaticOS is open and in use.') }));
-    }
-
-    card = h('div.recap', {
-      role: 'dialog', 'aria-labelledby': 'recap-title', dataset: { sunday: r.sunday },
-      onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hide(); } },
-    },
-      h('button.recap__x', { type: 'button', 'aria-label': tr('Close'), onclick: hide }, icon('x')),
-      h('div.recap__app', { text: tr('Weekly recap') }),
-      h('b.recap__t#recap-title', { text: tr('Your week') }),
-      h('small.recap__when', { text: `${dayFmt.format(start)} – ${dayFmt.format(end)}` }),
-      h('div.recap__body', parts),
-      h('div.recap__acts',
-        h('button.btn.btn--primary.btn--sm.recap__see', { type: 'button', onclick: () => { hide(); api.openApp('settings', { section: 'screentime' }); } }, icon('bar-chart'), tr('See Screen Time')),
-        h('button.btn.btn--sm.recap__close', { type: 'button', onclick: hide }, tr('Close'))),
-      h('button.recap__never', { type: 'button', onclick: () => { store.set(PREF, false); hide(); } }, tr('Don’t show weekly recaps')));
-    host.appendChild(card);
-    bus.emit('recap:shown', { sunday: r.sunday, empty: r.empty });
-  }
-
-  /** Is a recap due, and does its week hold anything? Then show it, once. */
-  async function check({ force = false } = {}) {
-    if (dead || busy || (card && !force)) return;
-    if (!force && store.get(PREF, true) === false) return;
-    const sunday = RECAP.lastSunday(new Date());
-    if (!force) {
-      if ((store.get(SHOWN) || {}).shown === sunday) return;
-      if (!ready()) return;
-      if (lastLook.sunday === sunday && Date.now() - lastLook.at < RECHECK_MS) return;
-    }
-    busy = true;
-    let r = null;
-    try { r = await RECAP.week(sunday); } catch (e) { r = null; } finally { busy = false; }
-    if (!r || dead) return;
-    lastLook = { sunday, at: Date.now() };
-    if (r.empty && !force) return;
-    if (!force) store.set(SHOWN, { shown: sunday });
-    show(r);
-  }
-
-  let n = 0;
-  const offs = [
-    bus.on('boot:ready', () => setTimeout(() => check(), 1500)),
-    /* a tab left open into Sunday, or a lock screen that has just gone */
-    bus.on('tick:5s', () => { if (++n % 6 === 0) check(); }),
-    bus.on('recap:show', () => check({ force: true })),
-    store.sub(PREF, v => { if (v === false) hide(); }),
-  ];
-  return () => {
-    dead = true;
-    offs.forEach(f => { try { f?.(); } catch (e) {} });
-    card?.remove();
-    card = null;
-  };
+  return out;
 }
 
-export default mountRecap;
+/** Games made in Forge or Studio during [from, to) — not ones saved from a link. */
+export async function gamesMade(from, to) {
+  try {
+    const P = await import('./projects.js');
+    const all = await P.list();
+    return all.filter(p => p && Number.isFinite(p.createdAt) && p.createdAt >= from && p.createdAt < to
+      && !p.imported && !/^(Saved from a share link|Imported from )/.test(p.versions?.[0]?.note || '')).length;
+  } catch (e) { return 0; }
+}
+
+/**
+ * The week ending on `sunday`:
+ *   { sunday, from, to,
+ *     time:   { total, days, apps: [{id, sec}] ×≤3, games: [{key, title, icon, kind, sec}] ×≤3 } | null,
+ *     focus:  { n, min } | null,
+ *     made:   { files: { Pictures?, Videos?, Music? }, games: n, total } | null,
+ *     badges: [{ id, name, icon, at }] | null,
+ *     empty:  true when every part is null }
+ */
+export async function week(sunday = lastSunday()) {
+  const { from, to } = bounds(sunday);
+
+  const r = ST.range(7, sunday);
+  const days = ST.week(sunday).filter(d => d.sec > 0).length;
+  const time = r.total > 0 ? { total: r.total, days, apps: r.apps.slice(0, 3), games: r.games.slice(0, 3) } : null;
+
+  const f = FOCUS.history(7, sunday).reduce((a, d) => ({ n: a.n + d.n, min: a.min + d.min }), { n: 0, min: 0 });
+  const focus = f.n > 0 ? f : null;
+
+  const files = filesSaved(from, to);
+  const games = await gamesMade(from, to);
+  const nFiles = Object.values(files).reduce((a, b) => a + b, 0);
+  const made = nFiles + games > 0 ? { files, games, total: nFiles + games } : null;
+
+  let badges = [];
+  try {
+    badges = ACH.list({}).filter(a => a.unlocked && a.at >= from && a.at < to).sort((a, b) => a.at - b.at)
+      .map(({ id, name, icon, at }) => ({ id, name, icon, at }));
+  } catch (e) { badges = []; }
+
+  const out = { sunday, from, to, time, focus, made, badges: badges.length ? badges : null };
+  out.empty = !time && !focus && !made && !out.badges;
+  return out;
+}
+
+export default { sundayOf, lastSunday, bounds, week, filesSaved, gamesMade, FOLDERS };

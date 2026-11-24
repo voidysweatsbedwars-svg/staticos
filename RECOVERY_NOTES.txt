@@ -1,0 +1,10 @@
+StaticOS files recovered from the browser Network HAR.
+
+This archive contains 221 files whose HTTP responses were captured with status 200
+from https://staticos.surge.sh/ during one browser session.
+
+Important limitations:
+- This is a network-session capture, not a guaranteed complete source-code archive.
+- Responses returned as 304 (Not Modified) had no response body in the HAR and were not reconstructed here.
+- Files loaded only when other apps/features are opened may not be included.
+- Keep the original ZIP as well and merge these files into it, replacing only matching paths if needed.

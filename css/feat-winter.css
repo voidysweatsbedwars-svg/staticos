@@ -37,9 +37,9 @@
   background:transparent center bottom/cover no-repeat;
   will-change:transform;transition:transform 600ms cubic-bezier(.22,1,.36,1);
 }
-.wp__winter > .wp__winter-sky{background-image:url("../images/sky_1.svg");transform:translate3d(calc(var(--px) * 3px),calc(var(--py) * 2px),0)}
-.wp__winter > .wp__winter-village{background-image:url("../images/village.svg");transform:translate3d(calc(var(--px) * -6px),calc(var(--py) * -3px),0)}
-.wp__winter > .wp__winter-front{background-image:url("../images/front_1.svg");transform:translate3d(calc(var(--px) * -13px),calc(var(--py) * -6px),0)}
+.wp__winter > .wp__winter-sky{background-image:url("../assets/winter/sky.svg");transform:translate3d(calc(var(--px) * 3px),calc(var(--py) * 2px),0)}
+.wp__winter > .wp__winter-village{background-image:url("../assets/winter/village.svg");transform:translate3d(calc(var(--px) * -6px),calc(var(--py) * -3px),0)}
+.wp__winter > .wp__winter-front{background-image:url("../assets/winter/front.svg");transform:translate3d(calc(var(--px) * -13px),calc(var(--py) * -6px),0)}
 .wp__winter ~ .wp__vig{opacity:.45}
 @media (prefers-reduced-motion:reduce){.wp__winter > i{transition:none}}
 /* the drive skins dress only the default wallpaper; the village replaces it */

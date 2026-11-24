@@ -7,10 +7,10 @@
 
 /* ---- reading fonts (SIL Open Font License: css/fonts/*-OFL.txt).
    Fetched only once one is chosen: nothing here loads by default. */
-@font-face{font-family:"OpenDyslexic";src:url("../fonts/OpenDyslexic-Regular.woff2") format("woff2");font-weight:100 549;font-style:normal;font-display:swap}
-@font-face{font-family:"OpenDyslexic";src:url("../fonts/OpenDyslexic-Bold.woff2") format("woff2");font-weight:550 900;font-style:normal;font-display:swap}
-@font-face{font-family:"Atkinson Hyperlegible";src:url("../fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2");font-weight:100 549;font-style:normal;font-display:swap}
-@font-face{font-family:"Atkinson Hyperlegible";src:url("../fonts/AtkinsonHyperlegible-Bold.woff2") format("woff2");font-weight:550 900;font-style:normal;font-display:swap}
+@font-face{font-family:"OpenDyslexic";src:url("fonts/OpenDyslexic-Regular.woff2") format("woff2");font-weight:100 549;font-style:normal;font-display:swap}
+@font-face{font-family:"OpenDyslexic";src:url("fonts/OpenDyslexic-Bold.woff2") format("woff2");font-weight:550 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Atkinson Hyperlegible";src:url("fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2");font-weight:100 549;font-style:normal;font-display:swap}
+@font-face{font-family:"Atkinson Hyperlegible";src:url("fonts/AtkinsonHyperlegible-Bold.woff2") format("woff2");font-weight:550 900;font-style:normal;font-display:swap}
 
 /* --font is what every app's text is set in (css/tokens.css); code keeps --mono */
 :root[data-font="dyslexic"]{--font:"OpenDyslexic","Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -64,6 +64,6 @@
 }
 /* outranks "reduce transparency" and "blur off", which drop every
    backdrop filter: this one is the magnifier, not decoration */
-:root .maglens.maglens{-webkit-backdrop-filter:url(feat-access.css#static-mag) !important;backdrop-filter:url(feat-access.css#static-mag) !important}
+:root .maglens.maglens{-webkit-backdrop-filter:url(#static-mag) !important;backdrop-filter:url(#static-mag) !important}
 /* full-screen zoom: the desktop itself is scaled, panning with the pointer */
 #os.is-zoomed{transform-origin:0 0}

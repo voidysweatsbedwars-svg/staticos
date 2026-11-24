@@ -99,7 +99,7 @@
 body[data-os][data-wp="canopy"] .os-skin{opacity:1}
 
 /* Windows: a glass bloom (assets/skins/windows-bloom.svg) */
-.os-skin__win{position:absolute;inset:0;background:#01051a url("../images/windows-bloom.svg") center/cover no-repeat}
+.os-skin__win{position:absolute;inset:0;background:#01051a url("../assets/skins/windows-bloom.svg") center/cover no-repeat}
 
 /* Linux: a dark desk; the real terminal (.desk-term) sits on top of it */
 body[data-os="linux"] .os-skin{

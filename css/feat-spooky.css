@@ -39,9 +39,9 @@
   will-change:transform;transition:transform 600ms cubic-bezier(.22,1,.36,1);
 }
 /* furthest back moves least, as in the scene (features.css) */
-.wp__spooky > .wp__spooky-sky{background-image:url("../images/sky.svg");transform:translate3d(calc(var(--px) * 3px),calc(var(--py) * 2px),0)}
-.wp__spooky > .wp__spooky-house{background-image:url("../images/house.svg");transform:translate3d(calc(var(--px) * -6px),calc(var(--py) * -3px),0)}
-.wp__spooky > .wp__spooky-front{background-image:url("../images/front.svg");transform:translate3d(calc(var(--px) * -13px),calc(var(--py) * -6px),0)}
+.wp__spooky > .wp__spooky-sky{background-image:url("../assets/spooky/sky.svg");transform:translate3d(calc(var(--px) * 3px),calc(var(--py) * 2px),0)}
+.wp__spooky > .wp__spooky-house{background-image:url("../assets/spooky/house.svg");transform:translate3d(calc(var(--px) * -6px),calc(var(--py) * -3px),0)}
+.wp__spooky > .wp__spooky-front{background-image:url("../assets/spooky/front.svg");transform:translate3d(calc(var(--px) * -13px),calc(var(--py) * -6px),0)}
 /* a band of ground fog that drifts through the graveyard: one tile, twice
    as wide as the screen, sliding one tile's width — a seamless loop that
    the compositor runs on its own */
@@ -82,7 +82,7 @@
 :root[data-spooky="on"] body,
 :root[data-spooky="on"] .win__bar,
 :root[data-spooky="on"] .fx .tile,
-:root[data-spooky="on"] .fx .row-item{cursor:url("../images/cursor.svg") 2 2,default}
+:root[data-spooky="on"] .fx .row-item{cursor:url("../assets/spooky/cursor.svg") 2 2,default}
 
 /* ---- leaves and bats ------------------------------------------------- */
 .spooky-fx{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
